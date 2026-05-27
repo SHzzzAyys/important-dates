@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>重要日子</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lunar-javascript/lunar.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace; }
+    input, select, button, textarea { font-family: inherit; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 2px; }
+    input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.5; }
+    .filter-btn.active { border-color: #f43f5e; color: #f43f5e; }
+    .row-today { background-color: #fff1f2; }
+    .row-past td { color: #a1a1aa; }
+  </style>
+</head>
+<body class="bg-zinc-50 text-zinc-900 min-h-screen">
+
+  <!-- ── Header ── -->
+  <header class="bg-white border-b border-zinc-200 sticky top-0 z-10">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 shrink-0">
+        <h1 class="text-sm font-semibold text-zinc-900 tracking-tight">重要日子</h1>
+        <span id="today-label" class="text-xs text-zinc-400 mono hidden sm:inline"></span>
+      </div>
+      <div class="flex items-center gap-2">
+        <select id="alert-days"
+          class="text-xs border border-zinc-200 rounded px-2 py-1.5 bg-white text-zinc-600
+                 focus:outline-none focus:border-rose-300 transition-colors duration-150">
+          <option value="3">提前 3 天提醒</option>
+          <option value="7" selected>提前 7 天提醒</option>
+          <option value="14">提前 14 天提醒</option>
+          <option value="30">提前 30 天提醒</option>
+        </select>
+        <button id="btn-notify"
+          class="text-xs px-3 py-1.5 rounded border border-zinc-200 bg-white text-zinc-600
+                 hover:border-zinc-300 transition-colors duration-150 whitespace-nowrap">
+          开启提醒
+        </button>
+        <button id="btn-add"
+          class="text-xs font-medium px-3 py-1.5 bg-rose-500 text-white rounded
+                 hover:bg-rose-400 transition-colors duration-150 whitespace-nowrap">
+          + 添加
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Alert Banner ── -->
+  <div id="alert-banner" class="hidden bg-rose-50 border-b border-rose-100">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex items-start gap-3">
+      <span class="text-xs font-medium text-rose-400 tracking-widest uppercase shrink-0 pt-0.5">提醒</span>
+      <p id="alert-text" class="text-sm text-rose-700 leading-relaxed"></p>
+    </div>
+  </div>
+
+  <main class="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+
+    <!-- ── KPI Row ── -->
+    <div class="grid grid-cols-3 gap-8 pb-8 border-b border-zinc-200">
+      <div class="space-y-1">
+        <p class="text-xs font-medium tracking-widest uppercase text-zinc-400">下一个</p>
+        <p id="kpi-next-name" class="text-sm text-zinc-600 truncate">—</p>
+        <p id="kpi-next-days" class="text-3xl mono font-semibold tabular-nums text-rose-500 leading-none">—</p>
+      </div>
+      <div class="space-y-1">
+        <p class="text-xs font-medium tracking-widest uppercase text-zinc-400">本月到期</p>
+        <p id="kpi-month" class="text-3xl mono font-semibold tabular-nums text-zinc-800 leading-none">0</p>
+        <p class="text-xs text-zinc-400">个日子</p>
+      </div>
+      <div class="space-y-1">
+        <p class="text-xs font-medium tracking-widest uppercase text-zinc-400">全部记录</p>
+        <p id="kpi-total" class="text-3xl mono font-semibold tabular-nums text-zinc-800 leading-none">0</p>
+        <p class="text-xs text-zinc-400">个日子</p>
+      </div>
+    </div>
+
+    <!-- ── Filter bar ── -->
+    <div class="flex items-center gap-3 flex-wrap">
+      <span class="text-xs font-medium tracking-widest uppercase text-zinc-400">筛选</span>
+      <div id="filter-bar" class="flex gap-2 flex-wrap">
+        <button class="filter-btn active text-xs mono px-2 py-1 rounded border transition-colors duration-150" data-filter="all">全部</button>
+        <button class="filter-btn text-xs mono px-2 py-1 rounded border border-zinc-200 text-zinc-400 transition-colors duration-150" data-filter="birthday">生日</button>
+        <button class="filter-btn text-xs mono px-2 py-1 rounded border border-zinc-200 text-zinc-400 transition-colors duration-150" data-filter="anniversary">纪念日</button>
+        <button class="filter-btn text-xs mono px-2 py-1 rounded border border-zinc-200 text-zinc-400 transition-colors duration-150" data-filter="deadline">截止日</button>
+        <button class="filter-btn text-xs mono px-2 py-1 rounded border border-zinc-200 text-zinc-400 transition-colors duration-150" data-filter="holiday">节日</button>
+        <button class="filter-btn text-xs mono px-2 py-1 rounded border border-zinc-200 text-zinc-400 transition-colors duration-150" data-filter="other">其他</button>
+      </div>
+    </div>
+
+    <!-- ── Table ── -->
+    <div class="bg-white rounded-xl border border-zinc-200 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead>
+            <tr class="border-b border-zinc-100">
+              <th class="text-left text-xs font-medium tracking-widest uppercase text-zinc-400 px-5 py-3 w-2/5">名称</th>
+              <th class="text-left text-xs font-medium tracking-widest uppercase text-zinc-400 px-4 py-3">类型</th>
+              <th class="text-left text-xs font-medium tracking-widest uppercase text-zinc-400 px-4 py-3 hidden sm:table-cell">日期</th>
+              <th class="text-right text-xs font-medium tracking-widest uppercase text-zinc-400 px-4 py-3">倒计时</th>
+              <th class="text-right text-xs font-medium tracking-widest uppercase text-zinc-400 px-5 py-3">操作</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+      <div id="empty-state" class="hidden py-16 text-center">
+        <p class="text-sm font-medium text-zinc-400">还没有日子</p>
+        <p class="text-xs text-zinc-300 mt-1.5">点击右上角"+ 添加"开始记录</p>
+      </div>
+    </div>
+
+    <p id="notify-tip" class="hidden text-xs text-zinc-400 text-center pb-2">
+      提示：将此页面设为浏览器启动页，每天打开浏览器时自动收到提醒
+    </p>
+
+  </main>
+
+  <!-- ── Modal ── -->
+  <div id="modal-overlay"
+    class="hidden fixed inset-0 bg-zinc-900/40 z-20 flex items-center justify-center px-4">
+    <div class="bg-white border border-zinc-200 rounded-2xl w-full max-w-md p-6 shadow-2xl shadow-zinc-200/80 max-h-[90vh] overflow-y-auto">
+      <h2 id="modal-title" class="text-sm font-semibold text-zinc-900 mb-5">添加日子</h2>
+      <form id="date-form" class="space-y-4">
+        <input type="hidden" id="form-id">
+
+        <!-- 名称 -->
+        <div class="space-y-1.5">
+          <label class="text-xs font-medium tracking-widest uppercase text-zinc-400">名称</label>
+          <input type="text" id="form-name" placeholder="妈妈生日" maxlength="40"
+            class="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm text-zinc-900
+                   placeholder-zinc-300 focus:outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100
+                   transition-colors duration-150">
+        </div>
+
+        <!-- 类型 -->
+        <div class="space-y-1.5">
+          <label class="text-xs font-medium tracking-widest uppercase text-zinc-400">类型</label>
+          <select id="form-category"
+            class="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm text-zinc-900 bg-white
+                   focus:outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100
+                   transition-colors duration-150">
+            <option value="birthday">生日</option>
+            <option value="anniversary">纪念日</option>
+            <option value="deadline">截止日</option>
+            <option value="holiday">节日</option>
+            <option value="other">其他</option>
+          </select>
+        </div>
+
+        <!-- 重复方式 -->
+        <div class="space-y-1.5">
+          <label class="text-xs font-medium tracking-widest uppercase text-zinc-400">重复方式</label>
+          <div class="flex gap-5">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="recur" id="recur-yes" value="yes" checked class="accent-rose-500">
+              <span class="text-sm text-zinc-700">每年重复</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="recur" id="recur-no" value="no" class="accent-rose-500">
+              <span class="text-sm text-zinc-700">具体日期</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 历法切换（仅每年重复时显示） -->
+        <div id="field-calendar-type" class="space-y-1.5">
+          <label class="text-xs font-medium tracking-widest uppercase text-zinc-400">历法</label>
+          <div class="flex gap-5">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="cal" id="cal-solar" value="solar" checked class="accent-rose-500">
+              <span class="text-sm text-zinc-700">阳历</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="cal" id="cal-lunar" value="lunar" class="accent-rose-500">
+              <span class="text-sm text-zinc-700">农历（阴历）</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 阳历 月+日 -->
+        <div id="field-solar" class="grid grid-cols-2 gap-3">
+          <div class="space-y-1.5">
+            <label class="text-xs font-medium tracking-widest uppercase text-zinc-400">月</label>
+            <select id="form-month"
+              class="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm mono text-zinc-900 bg-white
+                     focus:outline-none focus:border-rose-300 transition-colors duration-150"></select>
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-xs font-medium tracking-widest uppercase text-zinc-400">日</label>
+            <select id="form-day"
+              class="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm mono text-zinc-900 bg-white
+                     focus:outline-none focus:border-rose-300 transition-colors duration-150"></select>
+          </div>
+        </div>
+
+        <!-- 农历 月+日 -->
+        <div id="field-lunar" class="hidden grid grid-cols-2 gap-3">
+          <div class="space-y-1.5">
+            <label class="text-xs font-medium tracking-widest uppercase text-zinc-400">农历月</label>
+            <select id="form-lunar-month"
+              class="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm text-zinc-900 bg-white
+                     focus:outline-none focus:border-rose-300 transition-colors duration-150"></select>
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-xs font-medium tracking-widest uppercase text-zinc-400">农历日</label>
+            <select id="form-lunar-day"
+              class="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm text-zinc-900 bg-white
+                     focus:outline-none focus:border-rose-300 transition-colors duration-150"></select>
+          </div>
+        </div>
+
+        <!-- 具体日期（一次性） -->
+        <div id="field-onetime" class="hidden space-y-1.5">
+          <label class="text-xs font-medium tracking-widest uppercase text-zinc-400">具体日期</label>
+          <input type="date" id="form-date"
+            class="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm mono text-zinc-900 bg-white
+                   focus:outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100
+                   transition-colors duration-150">
+        </div>
+
+        <!-- 备注 -->
+        <div class="space-y-1.5">
+          <label class="text-xs font-medium tracking-widest uppercase text-zinc-400">备注（可选）</label>
+          <input type="text" id="form-note" placeholder="送礼物、预订餐厅…" maxlength="60"
+            class="w-full border border-zinc-200 rounded-lg px-3 py-2.5 text-sm text-zinc-900 bg-white
+                   placeholder-zinc-300 focus:outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100
+                   transition-colors duration-150">
+        </div>
+
+        <div class="flex gap-3 pt-1">
+          <button type="submit"
+            class="flex-1 text-sm font-medium py-2.5 bg-rose-500 text-white rounded-lg
+                   hover:bg-rose-400 transition-colors duration-150">保存</button>
+          <button type="button" id="btn-cancel"
+            class="flex-1 text-sm font-medium py-2.5 bg-zinc-100 text-zinc-600 rounded-lg
+                   hover:bg-zinc-200 transition-colors duration-150">取消</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // ── Constants ─────────────────────────────────────────────
+    const STORAGE_KEY = 'important-dates-v1';
+
+    const SOLAR_MONTHS = ['01月','02月','03月','04月','05月','06月',
+                          '07月','08月','09月','10月','11月','12月'];
+
+    const LUNAR_MONTH_NAMES = ['正月','二月','三月','四月','五月','六月',
+                               '七月','八月','九月','十月','冬月','腊月'];
+
+    const CAT = {
+      birthday:'生日', anniversary:'纪念日',
+      deadline:'截止日', holiday:'节日', other:'其他',
+    };
+
+    const SAMPLE = [
+      { id:'s1', name:'妈妈生日',   category:'birthday',    recurring:true,  isLunar:true,  month:8,  day:18, date:null, note:'买蛋糕' },
+      { id:'s2', name:'结婚纪念日', category:'anniversary', recurring:true,  isLunar:false, month:11, day:3,  date:null, note:'' },
+      { id:'s3', name:'元旦',       category:'holiday',     recurring:true,  isLunar:false, month:1,  day:1,  date:null, note:'' },
+      { id:'s4', name:'国庆节',     category:'holiday',     recurring:true,  isLunar:false, month:10, day:1,  date:null, note:'回家' },
+    ];
+
+    // ── State ─────────────────────────────────────────────────
+    let dates = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') ?? SAMPLE;
+    let currentFilter = 'all';
+    let editingId = null;
+
+    // ── Lunar helpers ─────────────────────────────────────────
+
+    // Format lunar day as Chinese: 初一…初十, 十一…十九, 二十, 廿一…廿九, 三十
+    function lunarDayName(d) {
+      const n = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+      if (d <= 10)  return '初' + n[d];
+      if (d <= 19)  return '十' + n[d - 10];
+      if (d === 20) return '二十';
+      if (d <= 29)  return '廿' + n[d - 20];
+      return '三十';
+    }
+
+    // Find the next solar date for a given lunar month/day
+    // Returns a Date object (midnight local time), or null if library unavailable
+    function nextSolarForLunar(lunarMonth, lunarDay) {
+      if (typeof Lunar === 'undefined') return null;
+      const t = today();
+      const baseYear = t.getFullYear();
+      for (let y = baseYear; y <= baseYear + 2; y++) {
+        try {
+          const s = Lunar.fromYmd(y, lunarMonth, lunarDay).getSolar();
+          const d = new Date(s.getYear(), s.getMonth() - 1, s.getDay());
+          d.setHours(0, 0, 0, 0);
+          if (d >= t) return d;
+        } catch (e) {
+          // This lunar date may not exist in year y (29-day month, etc.) — skip
+        }
+      }
+      return null;
+    }
+
+    // ── Date helpers ──────────────────────────────────────────
+    function today() {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+
+    function daysUntil(ev) {
+      const t = today();
+      if (ev.recurring) {
+        if (ev.isLunar) {
+          const next = nextSolarForLunar(ev.month, ev.day);
+          if (!next) return 9999; // library not loaded
+          return Math.round((next - t) / 86400000);
+        }
+        // Solar recurring
+        const yr = t.getFullYear();
+        let next = new Date(yr, ev.month - 1, ev.day);
+        next.setHours(0, 0, 0, 0);
+        if (next < t) next = new Date(yr + 1, ev.month - 1, ev.day);
+        return Math.round((next - t) / 86400000);
+      } else {
+        const target = new Date(ev.date + 'T00:00:00');
+        return Math.round((target - t) / 86400000);
+      }
+    }
+
+    function formatDate(ev) {
+      if (ev.recurring) {
+        if (ev.isLunar) {
+          return `农历 ${LUNAR_MONTH_NAMES[ev.month - 1]}${lunarDayName(ev.day)} · 每年`;
+        }
+        return SOLAR_MONTHS[ev.month - 1] + String(ev.day).padStart(2, '0') + '日 · 每年';
+      }
+      const [y, m, d] = ev.date.split('-');
+      return `${y}年${m}月${d}日`;
+    }
+
+    // ── Countdown badge ───────────────────────────────────────
+    function badge(days) {
+      if (days === 9999) return { text:'需联网', bg:'bg-zinc-100',   fg:'text-zinc-400',  bold:false };
+      if (days === 0)    return { text:'今天',   bg:'bg-rose-100',   fg:'text-rose-600',  bold:true  };
+      if (days === 1)    return { text:'明天',   bg:'bg-amber-100',  fg:'text-amber-600', bold:true  };
+      if (days <= 7)     return { text:`${days} 天`, bg:'bg-amber-50', fg:'text-amber-500', bold:false };
+      if (days <= 30)    return { text:`${days} 天`, bg:'bg-zinc-100', fg:'text-zinc-600',  bold:false };
+      if (days > 30)     return { text:`${days} 天`, bg:'bg-zinc-50',  fg:'text-zinc-400',  bold:false };
+      return               { text:`已过 ${Math.abs(days)} 天`, bg:'', fg:'text-zinc-300', bold:false, noBox:true };
+    }
+
+    function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+    function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(dates)); }
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Render ────────────────────────────────────────────────
+    function render() {
+      const filtered = currentFilter === 'all' ? dates : dates.filter(ev => ev.category === currentFilter);
+      const enriched = filtered
+        .map(ev => ({ ...ev, days: daysUntil(ev) }))
+        .sort((a, b) => {
+          if (a.days >= 0 && b.days < 0) return -1;
+          if (a.days < 0 && b.days >= 0) return 1;
+          return a.days - b.days;
+        });
+
+      const tbody = document.getElementById('table-body');
+      const empty = document.getElementById('empty-state');
+
+      if (enriched.length === 0) {
+        tbody.innerHTML = '';
+        empty.classList.remove('hidden');
+      } else {
+        empty.classList.add('hidden');
+        tbody.innerHTML = enriched.map(ev => {
+          const b       = badge(ev.days);
+          const isToday = ev.days === 0;
+          const isPast  = ev.days < 0;
+          const rowCls  = isToday ? 'row-today' : isPast ? 'row-past' : '';
+          const noteEl  = ev.note ? `<span class="text-xs text-zinc-400 ml-2">${esc(ev.note)}</span>` : '';
+          const lunarTag = ev.isLunar && ev.recurring
+            ? `<span class="text-xs mono px-1 py-0.5 rounded bg-amber-50 text-amber-500 ml-1.5">农历</span>` : '';
+          const badgeEl = b.noBox
+            ? `<span class="text-xs mono tabular-nums ${b.fg}">${b.text}</span>`
+            : `<span class="text-xs mono tabular-nums px-2 py-0.5 rounded ${b.bg} ${b.fg}${b.bold ? ' font-semibold' : ''}">${b.text}</span>`;
+          return `
+            <tr class="${rowCls} border-b border-zinc-100 last:border-0 hover:bg-zinc-50/70 transition-colors duration-100">
+              <td class="px-5 py-3.5">
+                <span class="text-sm text-zinc-800">${esc(ev.name)}</span>${lunarTag}${noteEl}
+              </td>
+              <td class="px-4 py-3.5">
+                <span class="text-xs mono px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500">${CAT[ev.category] || ev.category}</span>
+              </td>
+              <td class="px-4 py-3.5 hidden sm:table-cell">
+                <span class="text-sm mono tabular-nums text-zinc-400">${formatDate(ev)}</span>
+              </td>
+              <td class="px-4 py-3.5 text-right">${badgeEl}</td>
+              <td class="px-5 py-3.5 text-right whitespace-nowrap">
+                <button class="text-xs text-zinc-400 hover:text-zinc-700 transition-colors duration-150 mr-3"
+                  onclick="openEdit('${ev.id}')">编辑</button>
+                <button class="text-xs text-zinc-400 hover:text-rose-500 transition-colors duration-150"
+                  onclick="deleteDate('${ev.id}')">删除</button>
+              </td>
+            </tr>`;
+        }).join('');
+      }
+
+      updateKPI();
+      renderBanner();
+    }
+
+    function updateKPI() {
+      const all  = dates.map(ev => ({ ...ev, days: daysUntil(ev) }));
+      const next = all.filter(e => e.days >= 0 && e.days < 9999).sort((a, b) => a.days - b.days)[0];
+      document.getElementById('kpi-next-name').textContent = next ? next.name : '—';
+      document.getElementById('kpi-next-days').textContent = next ? badge(next.days).text : '—';
+      document.getElementById('kpi-month').textContent = all.filter(e => e.days >= 0 && e.days <= 30 && e.days < 9999).length;
+      document.getElementById('kpi-total').textContent = dates.length;
+    }
+
+    function renderBanner() {
+      const threshold = parseInt(document.getElementById('alert-days').value, 10);
+      const urgent = dates
+        .map(ev => ({ ...ev, days: daysUntil(ev) }))
+        .filter(ev => ev.days >= 0 && ev.days <= threshold && ev.days < 9999)
+        .sort((a, b) => a.days - b.days);
+      const el = document.getElementById('alert-banner');
+      if (urgent.length === 0) { el.classList.add('hidden'); return; }
+      el.classList.remove('hidden');
+      document.getElementById('alert-text').textContent = urgent.map(ev => {
+        if (ev.days === 0) return `今天是「${ev.name}」`;
+        if (ev.days === 1) return `明天是「${ev.name}」`;
+        return `「${ev.name}」还有 ${ev.days} 天`;
+      }).join(' · ');
+    }
+
+    // ── Notifications ─────────────────────────────────────────
+    function checkAndNotify() {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+      const todayStr = new Date().toDateString();
+      const key      = 'notified-' + todayStr;
+      const notified = new Set(JSON.parse(localStorage.getItem(key) || '[]'));
+      const threshold = parseInt(document.getElementById('alert-days').value, 10);
+      const toNotify  = dates
+        .map(ev => ({ ...ev, days: daysUntil(ev) }))
+        .filter(ev => ev.days >= 0 && ev.days <= threshold && ev.days < 9999 && !notified.has(ev.id))
+        .sort((a, b) => a.days - b.days);
+
+      toNotify.forEach((ev, i) => {
+        setTimeout(() => {
+          const title = ev.days === 0 ? `今天是「${ev.name}」` : `「${ev.name}」还有 ${ev.days} 天`;
+          const body  = [formatDate(ev), ev.note].filter(Boolean).join(' · ');
+          new Notification(title, { body, tag: ev.id });
+          notified.add(ev.id);
+          localStorage.setItem(key, JSON.stringify([...notified]));
+        }, i * 800);
+      });
+    }
+
+    function updateNotifyButton() {
+      const btn = document.getElementById('btn-notify');
+      const tip = document.getElementById('notify-tip');
+      if (!('Notification' in window)) {
+        btn.textContent = '浏览器不支持';
+        btn.disabled = true;
+        return;
+      }
+      if (Notification.permission === 'granted') {
+        btn.textContent = '通知已开启';
+        btn.className = 'text-xs px-3 py-1.5 rounded border border-emerald-200 bg-emerald-50 text-emerald-600 cursor-default';
+        tip.classList.remove('hidden');
+        checkAndNotify();
+      } else if (Notification.permission === 'denied') {
+        btn.textContent = '通知被屏蔽';
+        btn.title = '请在浏览器地址栏旁的锁图标中重新允许通知';
+        btn.disabled = true;
+        btn.className = 'text-xs px-3 py-1.5 rounded border border-zinc-200 bg-zinc-50 text-zinc-400 cursor-not-allowed';
+      }
+    }
+
+    document.getElementById('btn-notify').addEventListener('click', async () => {
+      if (Notification.permission !== 'default') return;
+      await Notification.requestPermission();
+      updateNotifyButton();
+    });
+
+    // ── Form field visibility ─────────────────────────────────
+    function toggleFormFields() {
+      const isRecurring = document.getElementById('recur-yes').checked;
+      const isLunar     = document.getElementById('cal-lunar').checked;
+
+      document.getElementById('field-calendar-type').classList.toggle('hidden', !isRecurring);
+      document.getElementById('field-solar').classList.toggle('hidden',          !isRecurring || isLunar);
+      document.getElementById('field-lunar').classList.toggle('hidden',          !isRecurring || !isLunar);
+      document.getElementById('field-onetime').classList.toggle('hidden',         isRecurring);
+    }
+
+    // ── Modal ─────────────────────────────────────────────────
+    function openAdd() {
+      editingId = null;
+      document.getElementById('modal-title').textContent = '添加日子';
+      document.getElementById('form-id').value           = '';
+      document.getElementById('form-name').value         = '';
+      document.getElementById('form-category').value     = 'birthday';
+      document.getElementById('form-note').value         = '';
+      document.getElementById('recur-yes').checked       = true;
+      document.getElementById('cal-solar').checked       = true;
+      document.getElementById('form-month').value        = '1';
+      document.getElementById('form-day').value          = '1';
+      document.getElementById('form-lunar-month').value  = '1';
+      document.getElementById('form-lunar-day').value    = '1';
+      document.getElementById('form-date').value         = '';
+      toggleFormFields();
+      document.getElementById('modal-overlay').classList.remove('hidden');
+      requestAnimationFrame(() => document.getElementById('form-name').focus());
+    }
+
+    function openEdit(id) {
+      const ev = dates.find(d => d.id === id);
+      if (!ev) return;
+      editingId = id;
+      document.getElementById('modal-title').textContent = '编辑日子';
+      document.getElementById('form-id').value           = ev.id;
+      document.getElementById('form-name').value         = ev.name;
+      document.getElementById('form-category').value     = ev.category;
+      document.getElementById('form-note').value         = ev.note || '';
+      if (ev.recurring) {
+        document.getElementById('recur-yes').checked = true;
+        if (ev.isLunar) {
+          document.getElementById('cal-lunar').checked          = true;
+          document.getElementById('form-lunar-month').value     = String(ev.month);
+          document.getElementById('form-lunar-day').value       = String(ev.day);
+        } else {
+          document.getElementById('cal-solar').checked          = true;
+          document.getElementById('form-month').value           = String(ev.month);
+          document.getElementById('form-day').value             = String(ev.day);
+        }
+      } else {
+        document.getElementById('recur-no').checked  = true;
+        document.getElementById('form-date').value   = ev.date;
+      }
+      toggleFormFields();
+      document.getElementById('modal-overlay').classList.remove('hidden');
+      requestAnimationFrame(() => document.getElementById('form-name').focus());
+    }
+
+    function closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
+
+    document.getElementById('date-form').addEventListener('submit', e => {
+      e.preventDefault();
+      const name = document.getElementById('form-name').value.trim();
+      if (!name) { document.getElementById('form-name').focus(); return; }
+
+      const recurring = document.getElementById('recur-yes').checked;
+      const isLunar   = recurring && document.getElementById('cal-lunar').checked;
+      let month = null, day = null, date = null;
+
+      if (recurring) {
+        if (isLunar) {
+          month = parseInt(document.getElementById('form-lunar-month').value, 10);
+          day   = parseInt(document.getElementById('form-lunar-day').value, 10);
+        } else {
+          month = parseInt(document.getElementById('form-month').value, 10);
+          day   = parseInt(document.getElementById('form-day').value, 10);
+        }
+      } else {
+        date = document.getElementById('form-date').value;
+        if (!date) { document.getElementById('form-date').focus(); return; }
+      }
+
+      const entry = {
+        id: editingId || uid(),
+        name,
+        category: document.getElementById('form-category').value,
+        recurring,
+        isLunar,
+        month, day, date,
+        note: document.getElementById('form-note').value.trim(),
+      };
+
+      if (editingId) {
+        const idx = dates.findIndex(d => d.id === editingId);
+        if (idx !== -1) dates[idx] = entry;
+      } else {
+        dates.push(entry);
+      }
+      save();
+      render();
+      closeModal();
+    });
+
+    function deleteDate(id) {
+      const ev = dates.find(d => d.id === id);
+      if (!ev || !confirm(`删除「${ev.name}」？`)) return;
+      dates = dates.filter(d => d.id !== id);
+      save();
+      render();
+    }
+
+    // ── Filter ────────────────────────────────────────────────
+    document.getElementById('filter-bar').addEventListener('click', e => {
+      const btn = e.target.closest('.filter-btn');
+      if (!btn) return;
+      document.querySelectorAll('.filter-btn').forEach(b => {
+        b.classList.remove('active', 'border-rose-400', 'text-rose-500');
+        b.classList.add('border-zinc-200', 'text-zinc-400');
+      });
+      btn.classList.add('active');
+      btn.classList.remove('border-zinc-200', 'text-zinc-400');
+      currentFilter = btn.dataset.filter;
+      render();
+    });
+
+    document.querySelectorAll('input[name="recur"]').forEach(r => r.addEventListener('change', toggleFormFields));
+    document.querySelectorAll('input[name="cal"]').forEach(r => r.addEventListener('change', toggleFormFields));
+
+    document.getElementById('alert-days').addEventListener('change', e => {
+      localStorage.setItem('alert-days', e.target.value);
+      renderBanner();
+      checkAndNotify();
+    });
+
+    // ── Populate selects ──────────────────────────────────────
+    (function () {
+      // Solar month
+      const ms = document.getElementById('form-month');
+      SOLAR_MONTHS.forEach((l, i) => {
+        const o = document.createElement('option');
+        o.value = String(i + 1); o.textContent = l; ms.appendChild(o);
+      });
+      // Solar day
+      const ds = document.getElementById('form-day');
+      for (let d = 1; d <= 31; d++) {
+        const o = document.createElement('option');
+        o.value = String(d); o.textContent = String(d).padStart(2, '0') + '日'; ds.appendChild(o);
+      }
+      // Lunar month
+      const lms = document.getElementById('form-lunar-month');
+      LUNAR_MONTH_NAMES.forEach((l, i) => {
+        const o = document.createElement('option');
+        o.value = String(i + 1); o.textContent = l; lms.appendChild(o);
+      });
+      // Lunar day
+      const lds = document.getElementById('form-lunar-day');
+      for (let d = 1; d <= 30; d++) {
+        const o = document.createElement('option');
+        o.value = String(d); o.textContent = lunarDayName(d); lds.appendChild(o);
+      }
+      // Restore alert-days
+      const saved = localStorage.getItem('alert-days');
+      if (saved) document.getElementById('alert-days').value = saved;
+    })();
+
+    document.getElementById('btn-add').addEventListener('click', openAdd);
+    document.getElementById('btn-cancel').addEventListener('click', closeModal);
+    document.getElementById('modal-overlay').addEventListener('click', e => {
+      if (e.target === e.currentTarget) closeModal();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    document.getElementById('today-label').textContent =
+      new Date().toLocaleDateString('zh-CN', { year:'numeric', month:'long', day:'numeric', weekday:'short' });
+
+    // ── Init ──────────────────────────────────────────────────
+    render();
+    updateNotifyButton();
+  </script>
+</body>
+</html>
